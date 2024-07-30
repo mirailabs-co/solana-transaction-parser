@@ -1,4 +1,4 @@
-import { BN, BorshInstructionCoder, Idl, IdlTypes } from "@project-serum/anchor";
+import { BN, BorshInstructionCoder, Idl, IdlTypes } from "@coral-xyz/anchor";
 import { AccountMeta, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
 
 /**
@@ -28,7 +28,10 @@ export type InstructionParsers = Map<PublicKey | string, ParserFunction<Idl, str
 /**
  * Function that takes transaction ix and returns parsed variant
  */
-export type ParserFunction<I extends Idl, IxName extends InstructionNames<I>> = (arg: TransactionInstruction, decoder: BorshInstructionCoder) => ParsedInstruction<I, IxName>;
+export type ParserFunction<I extends Idl, IxName extends InstructionNames<I>> = (
+	arg: TransactionInstruction,
+	decoder: BorshInstructionCoder,
+) => ParsedInstruction<I, IxName>;
 
 /**
  * public key as base58 string, parser

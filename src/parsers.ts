@@ -1,30 +1,35 @@
 import { Buffer } from "buffer";
 
+import { BN, BorshInstructionCoder, Idl, SystemProgram as SystemProgramIdl } from "@coral-xyz/anchor";
+import { blob, struct, u8 } from "@solana/buffer-layout";
+import * as spl from "@solana/spl-token";
+import { splDiscriminate } from "@solana/spl-type-length-value";
 import {
+	AccountMeta,
+	Connection,
+	Finality,
+	LoadedAddresses,
+	Message,
+	ParsedMessage,
+	ParsedTransactionWithMeta,
+	PartiallyDecodedInstruction,
 	PublicKey,
-	TransactionInstruction,
+	ParsedInstruction as SolanaParsedInstruction,
 	SystemInstruction,
 	SystemProgram,
-	Connection,
-	Message,
 	Transaction,
-	AccountMeta,
-	ParsedMessage,
-	ParsedInstruction as SolanaParsedInstruction,
-	PartiallyDecodedInstruction,
-	Finality,
+	TransactionInstruction,
 	VersionedMessage,
-	LoadedAddresses,
 	VersionedTransactionResponse,
-	ParsedTransactionWithMeta,
 } from "@solana/web3.js";
-import * as spl from "@solana/spl-token";
-import { BN, BorshInstructionCoder, Idl, SystemProgram as SystemProgramIdl } from "@project-serum/anchor";
-import { blob, struct, u8 } from "@solana/buffer-layout";
-import { splDiscriminate } from "@solana/spl-type-length-value";
 
-import { SplToken } from "./programs/spl-token.program";
-import { SplToken22 } from "./programs/spl-token-22.program";
+import {
+	compiledInstructionToInstruction,
+	flattenParsedTransaction,
+	flattenTransactionResponse,
+	parsedInstructionToInstruction,
+	parseTransactionAccounts,
+} from "./helpers";
 import {
 	AssociatedTokenProgramIdlLike,
 	IdlAccount,
@@ -40,13 +45,8 @@ import {
 	ProgramInfoType,
 	UnknownInstruction,
 } from "./interfaces";
-import {
-	compiledInstructionToInstruction,
-	flattenParsedTransaction,
-	flattenTransactionResponse,
-	parsedInstructionToInstruction,
-	parseTransactionAccounts,
-} from "./helpers";
+import { SplToken22 } from "./programs/spl-token-22.program";
+import { SplToken } from "./programs/spl-token.program";
 import {
 	decodeSetTransferFeeInstruction,
 	emitLayout,
@@ -233,13 +233,13 @@ function decodeSystemInstruction(instruction: TransactionInstruction): ParsedIns
 		? {
 				...parsed,
 				programId: SystemProgram.programId,
-			}
+		  }
 		: {
 				programId: SystemProgram.programId,
 				name: "unknown",
 				accounts: instruction.keys,
 				args: { unknown: instruction.data },
-			};
+		  };
 }
 
 function decodeTokenInstruction(instruction: TransactionInstruction): ParsedInstruction<SplToken> {
@@ -545,13 +545,13 @@ function decodeTokenInstruction(instruction: TransactionInstruction): ParsedInst
 		? {
 				...parsed,
 				programId: spl.TOKEN_PROGRAM_ID,
-			}
+		  }
 		: {
 				programId: spl.TOKEN_PROGRAM_ID,
 				name: "unknown",
 				accounts: instruction.keys,
 				args: { unknown: instruction.data },
-			};
+		  };
 }
 
 function decodeToken2022Instruction(instruction: TransactionInstruction): ParsedInstruction<SplToken> {
@@ -642,7 +642,7 @@ function decodeToken2022Instruction(instruction: TransactionInstruction): Parsed
 				accounts: [{ name: "account", ...decodedIx.keys.account }, { name: "currentAuthority", ...decodedIx.keys.currentAuthority }, ...multisig],
 				args: { authorityType: Number(decodedIx.data.authorityType), newAuthority: decodedIx.data.newAuthority },
 				programId: spl.TOKEN_2022_PROGRAM_ID,
-			} as ParsedIdlInstruction<SplToken22, "setAuthority">;
+			} as unknown as ParsedIdlInstruction<SplToken22, "setAuthority">;
 			break;
 		}
 		case spl.TokenInstruction.MintTo: {
@@ -856,7 +856,7 @@ function decodeToken2022Instruction(instruction: TransactionInstruction): Parsed
 			parsed = {
 				name: "getAccountDataSize",
 				accounts: [{ name: "mint", ...instruction.keys[0] }],
-				args: { extensionTypes: instructionData.extensions.map((ext) => spl.ExtensionType[ext]) },
+				args: { extensionTypes: instructionData.extensions.map((ext: any) => spl.ExtensionType[ext]) },
 			} as unknown as ParsedIdlInstruction<SplToken22, "getAccountDataSize">;
 			break;
 		}
@@ -1186,72 +1186,72 @@ function decodeToken2022Instruction(instruction: TransactionInstruction): Parsed
 			}
 			break;
 		}
-		case spl.TokenInstruction.GroupPointerExtension: {
-			const discriminator = u8().decode(instruction.data.slice(1));
-			switch (discriminator) {
-				case spl.GroupPointerInstruction.Initialize: {
-					const tokenMint = instruction.keys[0].pubkey;
-					if (!tokenMint) throw new Error(`Failed to parse InitializeGroupPointer instruction`);
-					const instructionData = spl.initializeGroupPointerData.decode(instruction.data);
-					parsed = {
-						name: "initializeGroupPointer",
-						accounts: [{ name: "mint", ...instruction.keys[0] }],
-						args: { authority: instructionData.authority, groupAddress: instructionData.groupAddress },
-					} as unknown as ParsedIdlInstruction<any>;
-					break;
-				}
-				case spl.GroupPointerInstruction.Update: {
-					const tokenMint = instruction.keys[0].pubkey;
-					if (!tokenMint) throw new Error(`Failed to parse UpdateGroupPointer instruction`);
-					const multisig = instruction.keys.slice(2).map((meta, idx) => ({ name: `signer_${idx}`, ...meta }));
-					const instructionData = spl.updateGroupPointerData.decode(instruction.data);
-					parsed = {
-						name: "updateGroupPointer",
-						accounts: [{ name: "mint", ...instruction.keys[0] }, { name: "authority", ...instruction.keys[1] }, { ...multisig }],
-						args: { groupAddress: instructionData.groupAddress },
-					} as unknown as ParsedIdlInstruction<any>;
-					break;
-				}
-				default: {
-					parsed = null;
-					break;
-				}
-			}
-			break;
-		}
-		case spl.TokenInstruction.GroupMemberPointerExtension: {
-			const discriminator = u8().decode(instruction.data.slice(1));
-			switch (discriminator) {
-				case spl.GroupMemberPointerInstruction.Initialize: {
-					const tokenMint = instruction.keys[0].pubkey;
-					if (!tokenMint) throw new Error(`Failed to parse InitializeGroupMemberPointer instruction`);
-					const instructionData = spl.initializeGroupMemberPointerData.decode(instruction.data);
-					parsed = {
-						name: "initializeGroupMemberPointer",
-						accounts: [{ name: "mint", ...instruction.keys[0] }],
-						args: { authority: instructionData.authority, memberAddress: instructionData.memberAddress },
-					} as unknown as ParsedIdlInstruction<any>;
-					break;
-				}
-				case spl.GroupMemberPointerInstruction.Update: {
-					const tokenMint = instruction.keys[0].pubkey;
-					if (!tokenMint) throw new Error(`Failed to parse UpdateGroupMemberPointer instruction`);
-					const multisig = instruction.keys.slice(2).map((meta, idx) => ({ name: `signer_${idx}`, ...meta }));
-					const instructionData = spl.updateGroupMemberPointerData.decode(instruction.data);
-					parsed = {
-						name: "updateGroupMemberPointer",
-						accounts: [{ name: "mint", ...instruction.keys[0] }, { name: "authority", ...instruction.keys[1] }, { ...multisig }],
-						args: { memberAddress: instructionData.memberAddress },
-					} as unknown as ParsedIdlInstruction<any>;
-					break;
-				}
-				default: {
-					parsed = null;
-					break;
-				}
-			}
-			break;
-		}
+		// case spl.TokenInstruction.GroupPointerExtension: {
+		// 	const discriminator = u8().decode(instruction.data.slice(1));
+		// 	switch (discriminator) {
+		// 		case spl.GroupPointerInstruction.Initialize: {
+		// 			const tokenMint = instruction.keys[0].pubkey;
+		// 			if (!tokenMint) throw new Error(`Failed to parse InitializeGroupPointer instruction`);
+		// 			const instructionData = spl.initializeGroupPointerData.decode(instruction.data);
+		// 			parsed = {
+		// 				name: "initializeGroupPointer",
+		// 				accounts: [{ name: "mint", ...instruction.keys[0] }],
+		// 				args: { authority: instructionData.authority, groupAddress: instructionData.groupAddress },
+		// 			} as unknown as ParsedIdlInstruction<any>;
+		// 			break;
+		// 		}
+		// 		case spl.GroupPointerInstruction.Update: {
+		// 			const tokenMint = instruction.keys[0].pubkey;
+		// 			if (!tokenMint) throw new Error(`Failed to parse UpdateGroupPointer instruction`);
+		// 			const multisig = instruction.keys.slice(2).map((meta, idx) => ({ name: `signer_${idx}`, ...meta }));
+		// 			const instructionData = spl.updateGroupPointerData.decode(instruction.data);
+		// 			parsed = {
+		// 				name: "updateGroupPointer",
+		// 				accounts: [{ name: "mint", ...instruction.keys[0] }, { name: "authority", ...instruction.keys[1] }, { ...multisig }],
+		// 				args: { groupAddress: instructionData.groupAddress },
+		// 			} as unknown as ParsedIdlInstruction<any>;
+		// 			break;
+		// 		}
+		// 		default: {
+		// 			parsed = null;
+		// 			break;
+		// 		}
+		// 	}
+		// 	break;
+		// }
+		// case spl.TokenInstruction.GroupMemberPointerExtension: {
+		// 	const discriminator = u8().decode(instruction.data.slice(1));
+		// 	switch (discriminator) {
+		// 		case spl.GroupMemberPointerInstruction.Initialize: {
+		// 			const tokenMint = instruction.keys[0].pubkey;
+		// 			if (!tokenMint) throw new Error(`Failed to parse InitializeGroupMemberPointer instruction`);
+		// 			const instructionData = spl.initializeGroupMemberPointerData.decode(instruction.data);
+		// 			parsed = {
+		// 				name: "initializeGroupMemberPointer",
+		// 				accounts: [{ name: "mint", ...instruction.keys[0] }],
+		// 				args: { authority: instructionData.authority, memberAddress: instructionData.memberAddress },
+		// 			} as unknown as ParsedIdlInstruction<any>;
+		// 			break;
+		// 		}
+		// 		case spl.GroupMemberPointerInstruction.Update: {
+		// 			const tokenMint = instruction.keys[0].pubkey;
+		// 			if (!tokenMint) throw new Error(`Failed to parse UpdateGroupMemberPointer instruction`);
+		// 			const multisig = instruction.keys.slice(2).map((meta, idx) => ({ name: `signer_${idx}`, ...meta }));
+		// 			const instructionData = spl.updateGroupMemberPointerData.decode(instruction.data);
+		// 			parsed = {
+		// 				name: "updateGroupMemberPointer",
+		// 				accounts: [{ name: "mint", ...instruction.keys[0] }, { name: "authority", ...instruction.keys[1] }, { ...multisig }],
+		// 				args: { memberAddress: instructionData.memberAddress },
+		// 			} as unknown as ParsedIdlInstruction<any>;
+		// 			break;
+		// 		}
+		// 		default: {
+		// 			parsed = null;
+		// 			break;
+		// 		}
+		// 	}
+		// 	break;
+		// }
 		default: {
 			const discriminator = instruction.data.slice(0, 8).toString("hex");
 			switch (discriminator) {
@@ -1337,13 +1337,13 @@ function decodeToken2022Instruction(instruction: TransactionInstruction): Parsed
 		? {
 				...parsed,
 				programId: spl.TOKEN_2022_PROGRAM_ID,
-			}
+		  }
 		: {
 				programId: spl.TOKEN_2022_PROGRAM_ID,
 				name: "unknown",
 				accounts: instruction.keys,
 				args: { unknown: instruction.data },
-			};
+		  };
 }
 
 function decodeAssociatedTokenInstruction(instruction: TransactionInstruction): ParsedInstruction<AssociatedTokenProgramIdlLike> {

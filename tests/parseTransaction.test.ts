@@ -2,7 +2,7 @@
 import "mocha";
 import assert from "assert";
 
-import { BN, Idl } from "@project-serum/anchor";
+import { BN, Idl } from "@coral-xyz/anchor";
 import { PublicKey, Connection } from "@solana/web3.js";
 
 import { SolanaParser } from "../src";

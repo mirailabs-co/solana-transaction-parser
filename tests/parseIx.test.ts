@@ -1,9 +1,9 @@
-import "mocha";
 import assert from "assert";
+import "mocha";
 
 import { SplToken } from "@project-serum/anchor";
-import { TransactionInstruction, Keypair } from "@solana/web3.js";
 import * as spl from "@solana/spl-token";
+import { Keypair, TransactionInstruction } from "@solana/web3.js";
 
 import { SolanaParser } from "../src/index";
 import { ParsedIdlInstruction } from "../src/interfaces";
